@@ -8,7 +8,7 @@ INSERT INTO users (username, password, role) VALUES
 
 -- Popolamento tabella images con alcune immagini iniziali
 INSERT INTO images (user_id, filename, inappropriate) VALUES
-(2, 'uploads/image1.jpg', 0),
-(2, 'uploads/image2.jpg', 0),
-(3, 'uploads/image3.jpg', 1),  -- Immagine segnalata come inappropriata
-(3, 'uploads/image4.jpg', 0);
+(2, 'uploads/image1.png', 0),
+(2, 'uploads/image2.png', 0),
+(3, 'uploads/image3.png', 1),  -- Immagine segnalata come inappropriata
+(3, 'uploads/image4.png', 0);
