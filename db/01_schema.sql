@@ -1,4 +1,4 @@
-CREATE DATABASE image_catalog;
+CREATE DATABASE IF NOT EXISTS image_catalog;
 
 USE image_catalog;
 
