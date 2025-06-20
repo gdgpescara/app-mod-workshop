@@ -42,5 +42,5 @@ RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 # https://github.com/docker-library/docs/blob/master/php/README.md#configuration
 RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
 
-# Expose the port
+# Expose the port 8080
 EXPOSE 8080
