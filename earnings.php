@@ -1,757 +1,1224 @@
 <?php
-// Earnings Calendar - Top 40 Stocks by Market Cap
-// Pagina standalone, non richiede autenticazione o database
+// Earnings Calendar - Dynamic Professional Dashboard
+// Fetches live data from Yahoo Finance API with graceful fallback
+header('Content-Type: text/html; charset=UTF-8');
 ?>
 <!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Earnings Calendar - Top 40 Stocks</title>
+    <title>Earnings Tracker Pro</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-/* ========== Reset & Base ========== */
-*, *::before, *::after {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+/* ========== Reset & Variables ========== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-    --bg-primary: #0a0e17;
-    --bg-secondary: #111827;
-    --bg-card: #1a2332;
-    --bg-card-hover: #1f2b3d;
-    --border: #2a3548;
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
+    --bg-base: #06080f;
+    --bg-primary: #0b1121;
+    --bg-secondary: #111a2e;
+    --bg-card: #141e33;
+    --bg-card-hover: #1a2744;
+    --bg-glass: rgba(20, 30, 51, 0.7);
+    --border: rgba(255,255,255,0.06);
+    --border-active: rgba(59,130,246,0.5);
+    --text-primary: #f0f4ff;
+    --text-secondary: #8b9fc6;
+    --text-muted: #4e6085;
     --accent: #3b82f6;
+    --accent-glow: rgba(59,130,246,0.25);
     --accent-light: #60a5fa;
-    --green: #22c55e;
-    --green-bg: rgba(34, 197, 94, 0.1);
+    --accent-2: #818cf8;
+    --green: #10b981;
+    --green-soft: rgba(16,185,129,0.12);
     --orange: #f59e0b;
-    --orange-bg: rgba(245, 158, 11, 0.1);
+    --orange-soft: rgba(245,158,11,0.12);
     --red: #ef4444;
-    --red-bg: rgba(239, 68, 68, 0.1);
-    --purple: #a855f7;
-    --purple-bg: rgba(168, 85, 247, 0.1);
-    --radius: 12px;
-    --radius-sm: 8px;
-    --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+    --red-soft: rgba(239,68,68,0.12);
+    --purple: #a78bfa;
+    --purple-soft: rgba(167,139,250,0.12);
+    --cyan: #22d3ee;
+    --cyan-soft: rgba(34,211,238,0.12);
+    --radius-xs: 6px;
+    --radius-sm: 10px;
+    --radius: 14px;
+    --radius-lg: 20px;
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+    --shadow: 0 8px 32px rgba(0,0,0,0.4);
+    --shadow-lg: 0 16px 48px rgba(0,0,0,0.5);
+    --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+html { scroll-behavior: smooth; }
+
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: var(--bg-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: var(--bg-base);
     color: var(--text-primary);
     line-height: 1.6;
     min-height: 100vh;
+    overflow-x: hidden;
 }
 
-/* ========== Header ========== */
-.header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 32px;
-    background: var(--bg-secondary);
+/* ========== Background Effects ========== */
+.bg-effects {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+}
+.bg-orb {
+    position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0.08;
+}
+.bg-orb-1 { width: 600px; height: 600px; background: var(--accent); top: -200px; right: -100px; }
+.bg-orb-2 { width: 500px; height: 500px; background: var(--purple); bottom: -100px; left: -150px; }
+.bg-orb-3 { width: 400px; height: 400px; background: var(--cyan); top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.bg-grid {
+    position: absolute; inset: 0;
+    background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 64px 64px;
+}
+
+/* ========== Layout ========== */
+.app { position: relative; z-index: 1; }
+
+/* ========== Navbar ========== */
+.navbar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 32px; height: 64px;
+    background: rgba(11,17,33,0.85);
+    backdrop-filter: blur(20px) saturate(1.5);
     border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    backdrop-filter: blur(12px);
-    flex-wrap: wrap;
-    gap: 12px;
 }
-
-.header-left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+.nav-brand {
+    display: flex; align-items: center; gap: 12px;
 }
-
-.logo { color: var(--accent); }
-
-.header h1 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    letter-spacing: -0.02em;
+.nav-logo {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 20px var(--accent-glow);
 }
-
-.badge {
-    background: var(--accent);
-    color: white;
-    font-size: 0.7rem;
-    font-weight: 600;
-    padding: 2px 8px;
+.nav-logo svg { color: white; }
+.nav-title { font-size: 1.125rem; font-weight: 700; letter-spacing: -0.03em; }
+.nav-title span { color: var(--accent-light); }
+.nav-badge {
+    font-size: 0.625rem; font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: white; padding: 3px 8px; border-radius: 20px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+}
+.nav-actions { display: flex; align-items: center; gap: 10px; }
+.nav-status {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 0.75rem; color: var(--text-muted);
+    padding: 6px 12px;
+    background: var(--bg-secondary); border: 1px solid var(--border);
     border-radius: 20px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
 }
-
-.header-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+.status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse-dot 2s ease-in-out infinite;
 }
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
+}
+.nav-time { font-size: 0.8125rem; color: var(--text-secondary); font-weight: 500; font-variant-numeric: tabular-nums; }
+.btn-refresh {
+    width: 36px; height: 36px;
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: var(--transition);
+}
+.btn-refresh:hover { border-color: var(--accent); color: var(--accent-light); background: var(--bg-card); }
+.btn-refresh.spinning svg { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-.search-box {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+/* ========== Hero Stats ========== */
+.hero-stats {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 1px; background: var(--border);
+    border-bottom: 1px solid var(--border);
+}
+.hero-stat {
     background: var(--bg-primary);
+    padding: 24px 28px;
+    position: relative; overflow: hidden;
+    transition: var(--transition);
+}
+.hero-stat:hover { background: var(--bg-secondary); }
+.hero-stat-icon {
+    width: 36px; height: 36px;
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 12px;
+}
+.hero-stat-icon.blue { background: rgba(59,130,246,0.12); color: var(--accent-light); }
+.hero-stat-icon.green { background: var(--green-soft); color: var(--green); }
+.hero-stat-icon.orange { background: var(--orange-soft); color: var(--orange); }
+.hero-stat-icon.purple { background: var(--purple-soft); color: var(--purple); }
+.hero-stat-icon.cyan { background: var(--cyan-soft); color: var(--cyan); }
+.hero-stat-label { font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; margin-bottom: 4px; }
+.hero-stat-value { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.2; }
+.hero-stat-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+
+/* ========== Timeline ========== */
+.timeline-section {
+    padding: 20px 32px 0;
+}
+.timeline-track {
+    position: relative;
+    display: flex; gap: 3px;
+    height: 48px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    padding: 4px;
+}
+.timeline-bar {
+    flex: 1;
+    border-radius: var(--radius-xs);
+    position: relative;
+    cursor: pointer;
+    transition: var(--transition);
+    min-width: 8px;
+    display: flex; align-items: center; justify-content: center;
+}
+.timeline-bar:hover { transform: scaleY(1.1); filter: brightness(1.3); }
+.timeline-bar-count {
+    font-size: 0.625rem; font-weight: 700; color: white;
+    opacity: 0; transition: var(--transition);
+}
+.timeline-bar:hover .timeline-bar-count { opacity: 1; }
+.timeline-labels {
+    display: flex; justify-content: space-between;
+    padding: 8px 4px 0;
+}
+.timeline-label { font-size: 0.6875rem; color: var(--text-muted); font-weight: 500; }
+
+/* ========== Toolbar ========== */
+.toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 32px 16px;
+    gap: 16px; flex-wrap: wrap;
+}
+.toolbar-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.toolbar-right { display: flex; align-items: center; gap: 10px; }
+
+.search-input {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    padding: 8px 14px;
-    transition: border-color 0.2s;
+    padding: 9px 14px;
+    transition: var(--transition);
+    min-width: 260px;
 }
+.search-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.search-input svg { color: var(--text-muted); flex-shrink: 0; }
+.search-input input {
+    background: none; border: none; outline: none;
+    color: var(--text-primary); font-size: 0.8125rem;
+    width: 100%; font-family: inherit;
+}
+.search-input input::placeholder { color: var(--text-muted); }
 
-.search-box:focus-within { border-color: var(--accent); }
-.search-box svg { color: var(--text-muted); flex-shrink: 0; }
+.chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 20px;
+    font-size: 0.8125rem; font-weight: 500;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer; transition: var(--transition);
+    white-space: nowrap; user-select: none;
+}
+.chip:hover { border-color: var(--text-muted); color: var(--text-primary); }
+.chip.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border-color: transparent; color: white;
+    box-shadow: 0 4px 12px var(--accent-glow);
+}
+.chip .chip-count {
+    font-size: 0.6875rem; font-weight: 700;
+    background: rgba(255,255,255,0.2); padding: 1px 6px; border-radius: 10px;
+}
+.chip.active .chip-count { background: rgba(255,255,255,0.25); }
 
-.search-box input {
-    background: none;
-    border: none;
-    outline: none;
+.select-wrap {
+    position: relative;
+}
+.select-wrap select {
+    appearance: none;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
     color: var(--text-primary);
-    font-size: 0.875rem;
-    width: 200px;
-    font-family: inherit;
+    padding: 9px 36px 9px 14px;
+    border-radius: var(--radius-sm);
+    font-family: inherit; font-size: 0.8125rem;
+    cursor: pointer; outline: none;
+    transition: var(--transition);
 }
-
-.search-box input::placeholder { color: var(--text-muted); }
+.select-wrap select:focus { border-color: var(--accent); }
+.select-wrap::after {
+    content: ''; position: absolute; right: 12px; top: 50%;
+    transform: translateY(-50%);
+    border: 4px solid transparent; border-top-color: var(--text-muted);
+    pointer-events: none;
+}
+.select-wrap select option { background: var(--bg-secondary); }
 
 .view-toggle {
-    display: flex;
-    background: var(--bg-primary);
+    display: flex; background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     overflow: hidden;
 }
-
 .view-btn {
-    background: none;
-    border: none;
-    padding: 8px 12px;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
+    background: none; border: none;
+    padding: 9px 14px;
+    color: var(--text-muted); cursor: pointer;
+    transition: var(--transition);
+    display: flex; align-items: center;
 }
-
-.view-btn.active { background: var(--accent); color: white; }
-.view-btn:hover:not(.active) { color: var(--text-primary); }
-
-/* ========== Stats Bar ========== */
-.stats-bar {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1px;
-    background: var(--border);
-    border-bottom: 1px solid var(--border);
+.view-btn.active {
+    background: var(--accent); color: white;
 }
+.view-btn:hover:not(.active) { color: var(--text-primary); background: var(--bg-card); }
 
-.stat {
-    background: var(--bg-secondary);
-    padding: 16px 24px;
-    text-align: center;
+/* ========== Results Info ========== */
+.results-info {
+    padding: 0 32px 12px;
+    font-size: 0.8125rem; color: var(--text-muted);
+    display: flex; align-items: center; gap: 8px;
 }
-
-.stat-label {
-    display: block;
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 4px;
-}
-
-.stat-value {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: var(--accent-light);
-}
-
-/* ========== Filters ========== */
-.filters {
-    display: flex;
-    gap: 8px;
-    padding: 16px 32px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-}
-
-.filter-btn {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    color: var(--text-secondary);
-    padding: 8px 18px;
-    border-radius: 20px;
-    font-size: 0.8125rem;
-    font-family: inherit;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-}
-
-.filter-btn:hover { border-color: var(--accent); color: var(--text-primary); }
-.filter-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
-
-/* ========== Sort Controls ========== */
-.sort-controls {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 0 32px 16px;
-}
-
-.sort-label { font-size: 0.8125rem; color: var(--text-muted); }
-
-#sortSelect {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    color: var(--text-primary);
-    padding: 6px 12px;
-    border-radius: var(--radius-sm);
-    font-family: inherit;
-    font-size: 0.8125rem;
-    cursor: pointer;
-    outline: none;
-}
-
-#sortSelect:focus { border-color: var(--accent); }
-#sortSelect option { background: var(--bg-secondary); }
-
-/* ========== Loading ========== */
-.loading {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 80px 20px;
-    gap: 16px;
-}
-
-.spinner {
-    width: 40px;
-    height: 40px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-.loading p { color: var(--text-muted); font-size: 0.875rem; }
-
-/* ========== Error State ========== */
-.error-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 80px 20px;
-    gap: 16px;
-    color: var(--text-muted);
-}
-
-.retry-btn {
-    background: var(--accent);
-    border: none;
-    color: white;
-    padding: 10px 24px;
-    border-radius: var(--radius-sm);
-    font-family: inherit;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: opacity 0.2s;
-}
-
-.retry-btn:hover { opacity: 0.9; }
+.results-count { font-weight: 600; color: var(--text-secondary); }
 
 /* ========== Grid View ========== */
 .grid-view {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 16px;
-    padding: 0 32px 32px;
+    padding: 0 32px 40px;
 }
 
 .card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 20px;
-    transition: all 0.25s ease;
+    padding: 0;
+    transition: var(--transition);
     position: relative;
     overflow: hidden;
+    cursor: default;
 }
-
 .card:hover {
-    background: var(--bg-card-hover);
-    border-color: var(--accent);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow);
+    border-color: var(--border-active);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow), 0 0 0 1px var(--border-active);
 }
+.card-accent {
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+.card.urgency-soon .card-accent { background: linear-gradient(90deg, var(--red), var(--orange)); }
+.card.urgency-near .card-accent { background: linear-gradient(90deg, var(--orange), var(--accent)); }
+.card.urgency-far .card-accent { background: linear-gradient(90deg, var(--green), var(--cyan)); }
 
-.card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+.card-body { padding: 20px; }
+.card-top {
+    display: flex; justify-content: space-between; align-items: flex-start;
     margin-bottom: 14px;
 }
-
-.card-ticker { font-size: 1.25rem; font-weight: 700; color: var(--text-primary); }
-.card-rank { font-size: 0.7rem; color: var(--text-muted); background: var(--bg-primary); padding: 2px 8px; border-radius: 12px; font-weight: 500; }
-.card-name { font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 4px; line-height: 1.4; }
-.card-sector { display: inline-block; font-size: 0.7rem; color: var(--purple); background: var(--purple-bg); padding: 2px 8px; border-radius: 12px; margin-bottom: 16px; }
-.card-divider { height: 1px; background: var(--border); margin-bottom: 16px; }
-.card-earnings { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.earnings-date { font-size: 0.9375rem; font-weight: 600; }
-
-.earnings-timing {
-    font-size: 0.7rem;
-    font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+.card-ticker-wrap { display: flex; align-items: center; gap: 10px; }
+.card-ticker {
+    font-size: 1.375rem; font-weight: 800; letter-spacing: -0.02em;
+    color: var(--text-primary);
+}
+.card-rank {
+    font-size: 0.625rem; font-weight: 700;
+    color: var(--text-muted);
+    background: var(--bg-primary);
+    padding: 3px 8px; border-radius: 12px;
+    border: 1px solid var(--border);
+}
+.card-countdown-box {
+    text-align: right;
+}
+.card-countdown-num {
+    font-size: 1.5rem; font-weight: 800; line-height: 1;
+    letter-spacing: -0.03em;
+}
+.card-countdown-label {
+    font-size: 0.625rem; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
 }
 
-.timing-bmo { color: var(--orange); background: var(--orange-bg); }
-.timing-amc { color: var(--purple); background: var(--purple-bg); }
+.card-name { font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 4px; line-height: 1.4; }
+.card-sector {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.6875rem; font-weight: 600;
+    padding: 3px 10px; border-radius: 12px;
+    margin-bottom: 16px;
+}
+.sector-Technology { color: var(--accent-light); background: rgba(59,130,246,0.1); }
+.sector-Financial { color: var(--green); background: var(--green-soft); }
+.sector-Healthcare { color: var(--cyan); background: var(--cyan-soft); }
+.sector-Consumer-Cyclical, .sector-Consumer-Defensive { color: var(--orange); background: var(--orange-soft); }
+.sector-Energy { color: var(--red); background: var(--red-soft); }
+.sector-Materials { color: var(--purple); background: var(--purple-soft); }
+
+.card-divider { height: 1px; background: var(--border); margin-bottom: 16px; }
+
+.card-earnings-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+}
+.card-date { display: flex; align-items: center; gap: 8px; }
+.card-date-icon {
+    width: 32px; height: 32px;
+    background: var(--bg-primary); border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent-light);
+}
+.card-date-text { font-size: 0.9375rem; font-weight: 600; }
+.card-timing {
+    font-size: 0.6875rem; font-weight: 700;
+    padding: 4px 10px; border-radius: 12px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+}
+.timing-bmo { color: var(--orange); background: var(--orange-soft); }
+.timing-amc { color: var(--purple); background: var(--purple-soft); }
 .timing-unknown { color: var(--text-muted); background: var(--bg-primary); }
 
-.card-meta { display: flex; justify-content: space-between; align-items: center; }
-.market-cap { font-size: 0.8125rem; color: var(--text-muted); }
-.countdown { font-size: 0.8125rem; font-weight: 500; }
-.countdown-soon { color: var(--red); }
-.countdown-near { color: var(--orange); }
-.countdown-far { color: var(--green); }
-.countdown-passed { color: var(--text-muted); }
-
-.card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px; }
-.card.urgency-soon::before { background: linear-gradient(90deg, var(--red), transparent); }
-.card.urgency-near::before { background: linear-gradient(90deg, var(--orange), transparent); }
-.card.urgency-far::before { background: linear-gradient(90deg, var(--green), transparent); }
-
-/* ========== List View ========== */
-.list-view { padding: 0 32px 32px; overflow-x: auto; }
-.list-view table { width: 100%; border-collapse: collapse; min-width: 800px; }
-
-.list-view thead th {
-    text-align: left;
-    padding: 12px 16px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-secondary);
-    position: sticky;
-    top: 0;
+.card-footer {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 20px;
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border);
+}
+.card-mcap {
+    font-size: 0.75rem; color: var(--text-muted); font-weight: 500;
+}
+.card-mcap strong { color: var(--text-secondary); font-weight: 700; }
+.card-progress {
+    width: 60px; height: 4px;
+    background: var(--bg-card);
+    border-radius: 2px; overflow: hidden;
+}
+.card-progress-bar {
+    height: 100%; border-radius: 2px;
+    transition: width 0.6s ease;
 }
 
-.list-view tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
-.list-view tbody tr:hover { background: var(--bg-card-hover); }
-.list-view tbody td { padding: 14px 16px; font-size: 0.875rem; }
-.list-view .ticker-cell { font-weight: 700; color: var(--accent-light); }
-.list-view .sector-cell { color: var(--purple); font-size: 0.8125rem; }
-.list-view .cap-cell { color: var(--text-secondary); }
-.list-view .date-cell { font-weight: 600; }
+/* ========== List View ========== */
+.list-view { padding: 0 32px 40px; }
+.list-table {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.list-table thead th {
+    text-align: left; padding: 14px 18px;
+    font-size: 0.6875rem; font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.07em;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 64px; z-index: 10;
+    cursor: pointer; user-select: none;
+    transition: var(--transition);
+}
+.list-table thead th:hover { color: var(--text-secondary); }
+.list-table tbody tr {
+    transition: var(--transition);
+    border-bottom: 1px solid var(--border);
+}
+.list-table tbody tr:last-child { border-bottom: none; }
+.list-table tbody tr:hover { background: var(--bg-card-hover); }
+.list-table tbody td { padding: 14px 18px; font-size: 0.875rem; }
+
+.td-ticker { font-weight: 800; color: var(--accent-light); letter-spacing: -0.01em; }
+.td-name { color: var(--text-secondary); max-width: 200px; }
+.td-sector span {
+    font-size: 0.75rem; font-weight: 600;
+    padding: 3px 10px; border-radius: 12px;
+}
+.td-date { font-weight: 600; }
+.td-timing span {
+    font-size: 0.6875rem; font-weight: 700;
+    padding: 4px 10px; border-radius: 12px;
+    text-transform: uppercase;
+}
+.td-countdown span {
+    font-weight: 700;
+}
+.td-mcap { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+/* Countdown colors */
+.c-soon { color: var(--red); }
+.c-near { color: var(--orange); }
+.c-far { color: var(--green); }
+.c-passed { color: var(--text-muted); }
+
+/* ========== Loading ========== */
+.loading-screen {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 100px 20px; gap: 20px;
+}
+.loading-spinner {
+    width: 44px; height: 44px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+.loading-text { color: var(--text-muted); font-size: 0.875rem; }
+.loading-sub { color: var(--text-muted); font-size: 0.75rem; opacity: 0.6; }
+
+/* ========== Empty State ========== */
+.empty-state {
+    text-align: center; padding: 80px 20px;
+    grid-column: 1 / -1;
+}
+.empty-state svg { color: var(--text-muted); margin-bottom: 16px; opacity: 0.4; }
+.empty-state p { color: var(--text-muted); font-size: 0.875rem; }
+
+/* ========== Error State ========== */
+.error-state {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 80px 20px; gap: 16px;
+}
+.error-state svg { color: var(--red); opacity: 0.6; }
+.error-state p { color: var(--text-muted); }
+.btn-retry {
+    background: var(--accent); border: none; color: white;
+    padding: 10px 28px; border-radius: var(--radius-sm);
+    font-family: inherit; font-size: 0.875rem; font-weight: 600;
+    cursor: pointer; transition: var(--transition);
+}
+.btn-retry:hover { filter: brightness(1.1); box-shadow: 0 4px 16px var(--accent-glow); }
 
 /* ========== Footer ========== */
 .footer {
-    text-align: center;
-    padding: 24px 32px;
+    text-align: center; padding: 32px;
     border-top: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: 0.75rem;
+    color: var(--text-muted); font-size: 0.75rem;
 }
+.footer a { color: var(--accent-light); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
 
-/* ========== Responsive ========== */
-@media (max-width: 768px) {
-    .header { padding: 12px 16px; }
-    .stats-bar { grid-template-columns: repeat(2, 1fr); }
-    .filters { padding: 12px 16px; }
-    .sort-controls { padding: 0 16px 12px; }
-    .grid-view { grid-template-columns: 1fr; padding: 0 16px 16px; }
-    .list-view { padding: 0 16px 16px; }
-    .search-box input { width: 140px; }
+/* ========== Animations ========== */
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
 }
+.card { animation: fadeUp 0.4s ease both; }
+.grid-view .card:nth-child(1) { animation-delay: 0s; }
+.grid-view .card:nth-child(2) { animation-delay: 0.04s; }
+.grid-view .card:nth-child(3) { animation-delay: 0.08s; }
+.grid-view .card:nth-child(4) { animation-delay: 0.12s; }
+.grid-view .card:nth-child(5) { animation-delay: 0.16s; }
+.grid-view .card:nth-child(6) { animation-delay: 0.20s; }
+.grid-view .card:nth-child(7) { animation-delay: 0.24s; }
+.grid-view .card:nth-child(8) { animation-delay: 0.28s; }
+.grid-view .card:nth-child(n+9) { animation-delay: 0.32s; }
 
-@media (max-width: 480px) {
-    .header-left h1 { font-size: 1rem; }
-    .search-box input { width: 100px; }
-    .stat { padding: 12px 16px; }
-    .stat-value { font-size: 1rem; }
-}
+.list-table tbody tr { animation: fadeUp 0.3s ease both; }
+.list-table tbody tr:nth-child(1) { animation-delay: 0s; }
+.list-table tbody tr:nth-child(2) { animation-delay: 0.02s; }
+.list-table tbody tr:nth-child(3) { animation-delay: 0.04s; }
+.list-table tbody tr:nth-child(4) { animation-delay: 0.06s; }
+.list-table tbody tr:nth-child(n+5) { animation-delay: 0.08s; }
 
+/* ========== Scrollbar ========== */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-track { background: var(--bg-base); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+/* ========== Responsive ========== */
+@media (max-width: 1024px) {
+    .hero-stats { grid-template-columns: repeat(3, 1fr); }
+    .hero-stats .hero-stat:nth-child(4),
+    .hero-stats .hero-stat:nth-child(5) { grid-column: span 1; }
 }
-
-.card, .list-view tbody tr { animation: fadeIn 0.3s ease forwards; }
-.grid-view .card:nth-child(n) { animation-delay: calc(var(--i, 0) * 0.04s); }
+@media (max-width: 768px) {
+    .navbar { padding: 0 16px; height: 56px; }
+    .nav-badge, .nav-status { display: none; }
+    .hero-stats { grid-template-columns: repeat(2, 1fr); }
+    .hero-stats .hero-stat:last-child { grid-column: 1 / -1; }
+    .timeline-section { padding: 16px; }
+    .toolbar { padding: 16px; }
+    .search-input { min-width: 100%; order: -1; }
+    .grid-view { grid-template-columns: 1fr; padding: 0 16px 32px; }
+    .list-view { padding: 0 16px 32px; overflow-x: auto; }
+    .list-table { min-width: 800px; }
+    .results-info { padding: 0 16px 8px; }
+}
+@media (max-width: 480px) {
+    .hero-stat { padding: 16px; }
+    .hero-stat-value { font-size: 1.375rem; }
+    .nav-title { font-size: 0.9375rem; }
+}
     </style>
 </head>
 <body>
-    <div class="app">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-left">
-                <div class="logo">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="3" width="7" height="7"></rect>
-                        <rect x="14" y="3" width="7" height="7"></rect>
-                        <rect x="3" y="14" width="7" height="7"></rect>
-                        <rect x="14" y="14" width="7" height="7"></rect>
-                    </svg>
-                </div>
-                <h1>Earnings Calendar</h1>
-                <span class="badge">Top 40</span>
-            </div>
-            <div class="header-right">
-                <div class="search-box">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                    <input type="text" id="searchInput" placeholder="Cerca ticker o nome...">
-                </div>
-                <div class="view-toggle">
-                    <button id="btnGrid" class="view-btn active" title="Vista griglia">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>
-                    </button>
-                    <button id="btnList" class="view-btn" title="Vista lista">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-                    </button>
-                </div>
-            </div>
-        </header>
 
-        <!-- Stats bar -->
-        <div class="stats-bar">
-            <div class="stat">
-                <span class="stat-label">Prossimi 7 giorni</span>
-                <span class="stat-value" id="next7days">-</span>
+<div class="bg-effects">
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+    <div class="bg-orb bg-orb-3"></div>
+    <div class="bg-grid"></div>
+</div>
+
+<div class="app">
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="nav-logo">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
             </div>
-            <div class="stat">
-                <span class="stat-label">Prossimi 30 giorni</span>
-                <span class="stat-value" id="next30days">-</span>
-            </div>
-            <div class="stat">
-                <span class="stat-label">Questa settimana</span>
-                <span class="stat-value" id="thisWeek">-</span>
-            </div>
-            <div class="stat">
-                <span class="stat-label">Ultimo aggiornamento</span>
-                <span class="stat-value" id="lastUpdate">-</span>
-            </div>
+            <div class="nav-title">Earnings<span>Tracker</span></div>
+            <span class="nav-badge">Pro</span>
         </div>
-
-        <!-- Filters -->
-        <div class="filters">
-            <button class="filter-btn active" data-filter="all">Tutti</button>
-            <button class="filter-btn" data-filter="thisWeek">Questa settimana</button>
-            <button class="filter-btn" data-filter="nextWeek">Prossima settimana</button>
-            <button class="filter-btn" data-filter="thisMonth">Questo mese</button>
-            <button class="filter-btn" data-filter="bmo">Pre-market</button>
-            <button class="filter-btn" data-filter="amc">After-market</button>
+        <div class="nav-actions">
+            <div class="nav-status">
+                <span class="status-dot"></span>
+                <span id="dataSource">Dati live</span>
+            </div>
+            <span class="nav-time" id="navTime"></span>
+            <button class="btn-refresh" id="btnRefresh" title="Aggiorna dati">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+            </button>
         </div>
+    </nav>
 
-        <!-- Sort controls -->
-        <div class="sort-controls">
-            <span class="sort-label">Ordina per:</span>
-            <select id="sortSelect">
-                <option value="date-asc">Data (prossimi prima)</option>
-                <option value="date-desc">Data (ultimi prima)</option>
-                <option value="cap-desc">Cap. di mercato (decrescente)</option>
-                <option value="cap-asc">Cap. di mercato (crescente)</option>
-                <option value="name-asc">Nome (A-Z)</option>
-            </select>
+    <!-- Hero Stats -->
+    <div class="hero-stats">
+        <div class="hero-stat">
+            <div class="hero-stat-icon blue">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            </div>
+            <div class="hero-stat-label">Prossimi 7 giorni</div>
+            <div class="hero-stat-value" id="stat7d">-</div>
+            <div class="hero-stat-sub" id="stat7dSub">earnings</div>
         </div>
-
-        <!-- Loading state -->
-        <div id="loading" class="loading">
-            <div class="spinner"></div>
-            <p>Caricamento dati earnings...</p>
+        <div class="hero-stat">
+            <div class="hero-stat-icon green">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+            </div>
+            <div class="hero-stat-label">Prossimi 30 giorni</div>
+            <div class="hero-stat-value" id="stat30d">-</div>
+            <div class="hero-stat-sub" id="stat30dSub">earnings</div>
         </div>
-
-        <!-- Error state -->
-        <div id="error" class="error-state" style="display:none">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-            <p id="errorMsg">Errore nel caricamento dei dati</p>
-            <button onclick="location.reload()" class="retry-btn">Riprova</button>
+        <div class="hero-stat">
+            <div class="hero-stat-icon orange">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+            <div class="hero-stat-label">Prossimo earnings</div>
+            <div class="hero-stat-value" id="statNext">-</div>
+            <div class="hero-stat-sub" id="statNextSub">-</div>
         </div>
-
-        <!-- Grid view -->
-        <div id="gridView" class="grid-view" style="display:none"></div>
-
-        <!-- List view -->
-        <div id="listView" class="list-view" style="display:none">
-            <table>
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Ticker</th>
-                        <th>Azienda</th>
-                        <th>Settore</th>
-                        <th>Cap. Mercato</th>
-                        <th>Data Earnings</th>
-                        <th>Orario</th>
-                        <th>Countdown</th>
-                    </tr>
-                </thead>
-                <tbody id="listBody"></tbody>
-            </table>
+        <div class="hero-stat">
+            <div class="hero-stat-icon purple">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
+            </div>
+            <div class="hero-stat-label">Settori monitorati</div>
+            <div class="hero-stat-value" id="statSectors">-</div>
+            <div class="hero-stat-sub">categorie</div>
+        </div>
+        <div class="hero-stat">
+            <div class="hero-stat-icon cyan">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+            </div>
+            <div class="hero-stat-label">Market Cap totale</div>
+            <div class="hero-stat-value" id="statTotalCap">-</div>
+            <div class="hero-stat-sub">titoli tracciati</div>
         </div>
     </div>
 
-    <footer class="footer">
-        <p>I dati sulle date degli earnings sono indicativi e soggetti a variazioni. Verificare sempre con fonti ufficiali.</p>
-    </footer>
+    <!-- Timeline -->
+    <div class="timeline-section">
+        <div class="timeline-track" id="timelineTrack"></div>
+        <div class="timeline-labels" id="timelineLabels"></div>
+    </div>
 
-    <script>
-// Top 40 stocks by market cap
-const TOP_40_STOCKS = [
-  { ticker: "AAPL",  name: "Apple Inc.",                    sector: "Technology",        marketCap: 3520, earningsDate: "2026-04-30", timing: "amc" },
-  { ticker: "MSFT",  name: "Microsoft Corporation",         sector: "Technology",        marketCap: 3180, earningsDate: "2026-04-22", timing: "amc" },
-  { ticker: "NVDA",  name: "NVIDIA Corporation",            sector: "Technology",        marketCap: 3050, earningsDate: "2026-02-26", timing: "amc" },
-  { ticker: "GOOG",  name: "Alphabet Inc. (Google)",        sector: "Technology",        marketCap: 2350, earningsDate: "2026-04-28", timing: "amc" },
-  { ticker: "AMZN",  name: "Amazon.com Inc.",               sector: "Consumer Cyclical", marketCap: 2280, earningsDate: "2026-04-24", timing: "amc" },
-  { ticker: "META",  name: "Meta Platforms Inc.",            sector: "Technology",        marketCap: 1750, earningsDate: "2026-04-23", timing: "amc" },
-  { ticker: "BRK.B", name: "Berkshire Hathaway Inc.",       sector: "Financial",         marketCap: 1120, earningsDate: "2026-05-02", timing: "bmo" },
-  { ticker: "TSLA",  name: "Tesla Inc.",                    sector: "Consumer Cyclical", marketCap: 1080, earningsDate: "2026-04-22", timing: "amc" },
-  { ticker: "LLY",   name: "Eli Lilly and Company",         sector: "Healthcare",        marketCap: 820,  earningsDate: "2026-04-24", timing: "bmo" },
-  { ticker: "TSM",   name: "Taiwan Semiconductor",          sector: "Technology",        marketCap: 810,  earningsDate: "2026-04-17", timing: "bmo" },
-  { ticker: "AVGO",  name: "Broadcom Inc.",                 sector: "Technology",        marketCap: 790,  earningsDate: "2026-03-06", timing: "amc" },
-  { ticker: "JPM",   name: "JPMorgan Chase & Co.",          sector: "Financial",         marketCap: 740,  earningsDate: "2026-04-11", timing: "bmo" },
-  { ticker: "V",     name: "Visa Inc.",                     sector: "Financial",         marketCap: 630,  earningsDate: "2026-04-22", timing: "amc" },
-  { ticker: "WMT",   name: "Walmart Inc.",                  sector: "Consumer Defensive",marketCap: 610,  earningsDate: "2026-02-20", timing: "bmo" },
-  { ticker: "UNH",   name: "UnitedHealth Group Inc.",       sector: "Healthcare",        marketCap: 590,  earningsDate: "2026-04-15", timing: "bmo" },
-  { ticker: "XOM",   name: "Exxon Mobil Corporation",       sector: "Energy",            marketCap: 560,  earningsDate: "2026-04-25", timing: "bmo" },
-  { ticker: "MA",    name: "Mastercard Incorporated",       sector: "Financial",         marketCap: 480,  earningsDate: "2026-04-29", timing: "bmo" },
-  { ticker: "ORCL",  name: "Oracle Corporation",            sector: "Technology",        marketCap: 470,  earningsDate: "2026-03-10", timing: "amc" },
-  { ticker: "PG",    name: "Procter & Gamble Co.",          sector: "Consumer Defensive",marketCap: 460,  earningsDate: "2026-04-17", timing: "bmo" },
-  { ticker: "COST",  name: "Costco Wholesale Corp.",        sector: "Consumer Defensive",marketCap: 440,  earningsDate: "2026-03-06", timing: "amc" },
-  { ticker: "JNJ",   name: "Johnson & Johnson",             sector: "Healthcare",        marketCap: 430,  earningsDate: "2026-04-15", timing: "bmo" },
-  { ticker: "HD",    name: "The Home Depot Inc.",            sector: "Consumer Cyclical", marketCap: 420,  earningsDate: "2026-02-25", timing: "bmo" },
-  { ticker: "NFLX",  name: "Netflix Inc.",                  sector: "Technology",        marketCap: 410,  earningsDate: "2026-04-17", timing: "amc" },
-  { ticker: "ABBV",  name: "AbbVie Inc.",                   sector: "Healthcare",        marketCap: 390,  earningsDate: "2026-04-25", timing: "bmo" },
-  { ticker: "BAC",   name: "Bank of America Corp.",         sector: "Financial",         marketCap: 370,  earningsDate: "2026-04-15", timing: "bmo" },
-  { ticker: "CRM",   name: "Salesforce Inc.",               sector: "Technology",        marketCap: 360,  earningsDate: "2026-02-26", timing: "amc" },
-  { ticker: "CVX",   name: "Chevron Corporation",           sector: "Energy",            marketCap: 340,  earningsDate: "2026-04-25", timing: "bmo" },
-  { ticker: "KO",    name: "The Coca-Cola Company",         sector: "Consumer Defensive",marketCap: 320,  earningsDate: "2026-04-21", timing: "bmo" },
-  { ticker: "MRK",   name: "Merck & Co. Inc.",              sector: "Healthcare",        marketCap: 310,  earningsDate: "2026-04-24", timing: "bmo" },
-  { ticker: "AMD",   name: "Advanced Micro Devices",        sector: "Technology",        marketCap: 300,  earningsDate: "2026-04-29", timing: "amc" },
-  { ticker: "PEP",   name: "PepsiCo Inc.",                  sector: "Consumer Defensive",marketCap: 280,  earningsDate: "2026-04-22", timing: "bmo" },
-  { ticker: "TMO",   name: "Thermo Fisher Scientific",      sector: "Healthcare",        marketCap: 270,  earningsDate: "2026-04-23", timing: "bmo" },
-  { ticker: "ADBE",  name: "Adobe Inc.",                    sector: "Technology",        marketCap: 265,  earningsDate: "2026-03-12", timing: "amc" },
-  { ticker: "LIN",   name: "Linde plc",                    sector: "Materials",         marketCap: 260,  earningsDate: "2026-04-28", timing: "bmo" },
-  { ticker: "ACN",   name: "Accenture plc",                sector: "Technology",        marketCap: 255,  earningsDate: "2026-03-20", timing: "bmo" },
-  { ticker: "WFC",   name: "Wells Fargo & Company",         sector: "Financial",         marketCap: 250,  earningsDate: "2026-04-11", timing: "bmo" },
-  { ticker: "MCD",   name: "McDonald's Corporation",        sector: "Consumer Cyclical", marketCap: 245,  earningsDate: "2026-04-28", timing: "bmo" },
-  { ticker: "CSCO",  name: "Cisco Systems Inc.",            sector: "Technology",        marketCap: 240,  earningsDate: "2026-02-19", timing: "amc" },
-  { ticker: "ABT",   name: "Abbott Laboratories",           sector: "Healthcare",        marketCap: 235,  earningsDate: "2026-04-16", timing: "bmo" },
-  { ticker: "DHR",   name: "Danaher Corporation",           sector: "Healthcare",        marketCap: 230,  earningsDate: "2026-04-22", timing: "bmo" }
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <div class="toolbar-left">
+            <div class="search-input">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="searchInput" placeholder="Cerca ticker, azienda o settore...">
+            </div>
+            <button class="chip active" data-filter="all">Tutti <span class="chip-count" id="countAll">0</span></button>
+            <button class="chip" data-filter="thisWeek">Questa sett.</button>
+            <button class="chip" data-filter="nextWeek">Prossima sett.</button>
+            <button class="chip" data-filter="thisMonth">Questo mese</button>
+            <button class="chip" data-filter="bmo">Pre-Market</button>
+            <button class="chip" data-filter="amc">After-Market</button>
+        </div>
+        <div class="toolbar-right">
+            <div class="select-wrap">
+                <select id="sortSelect">
+                    <option value="date-asc">Data (prossimi)</option>
+                    <option value="date-desc">Data (lontani)</option>
+                    <option value="cap-desc">Market Cap ↓</option>
+                    <option value="cap-asc">Market Cap ↑</option>
+                    <option value="name-asc">Nome A→Z</option>
+                </select>
+            </div>
+            <div class="view-toggle">
+                <button id="btnGrid" class="view-btn active" title="Griglia">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>
+                </button>
+                <button id="btnList" class="view-btn" title="Lista">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results info -->
+    <div class="results-info">
+        <span>Mostrando</span>
+        <span class="results-count" id="resultsCount">0</span>
+        <span>risultati</span>
+    </div>
+
+    <!-- Loading -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Caricamento dati earnings...</div>
+        <div class="loading-sub">Connessione alle fonti dati in corso</div>
+    </div>
+
+    <!-- Error -->
+    <div id="errorScreen" class="error-state" style="display:none">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+        <p id="errorMsg">Impossibile caricare i dati</p>
+        <button class="btn-retry" onclick="loadData()">Riprova</button>
+    </div>
+
+    <!-- Grid -->
+    <div id="gridView" class="grid-view" style="display:none"></div>
+
+    <!-- List -->
+    <div id="listView" class="list-view" style="display:none">
+        <table class="list-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Ticker</th>
+                    <th>Azienda</th>
+                    <th>Settore</th>
+                    <th>Market Cap</th>
+                    <th>Data Earnings</th>
+                    <th>Orario</th>
+                    <th>Countdown</th>
+                </tr>
+            </thead>
+            <tbody id="listBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<footer class="footer">
+    <p>EarningsTracker Pro &mdash; I dati sono indicativi e soggetti a variazioni. Verificare sempre con fonti ufficiali.<br>
+    Ultimo refresh: <span id="footerUpdate">-</span></p>
+</footer>
+
+<script>
+// ============================================================
+// Stock Data - Base dataset (used as fallback)
+// ============================================================
+const BASE_STOCKS = [
+  { ticker:"AAPL",name:"Apple Inc.",sector:"Technology",marketCap:3520,earningsDate:"2026-04-30",timing:"amc" },
+  { ticker:"MSFT",name:"Microsoft Corporation",sector:"Technology",marketCap:3180,earningsDate:"2026-04-22",timing:"amc" },
+  { ticker:"NVDA",name:"NVIDIA Corporation",sector:"Technology",marketCap:3050,earningsDate:"2026-02-26",timing:"amc" },
+  { ticker:"GOOG",name:"Alphabet Inc. (Google)",sector:"Technology",marketCap:2350,earningsDate:"2026-04-28",timing:"amc" },
+  { ticker:"AMZN",name:"Amazon.com Inc.",sector:"Consumer Cyclical",marketCap:2280,earningsDate:"2026-04-24",timing:"amc" },
+  { ticker:"META",name:"Meta Platforms Inc.",sector:"Technology",marketCap:1750,earningsDate:"2026-04-23",timing:"amc" },
+  { ticker:"BRK.B",name:"Berkshire Hathaway Inc.",sector:"Financial",marketCap:1120,earningsDate:"2026-05-02",timing:"bmo" },
+  { ticker:"TSLA",name:"Tesla Inc.",sector:"Consumer Cyclical",marketCap:1080,earningsDate:"2026-04-22",timing:"amc" },
+  { ticker:"LLY",name:"Eli Lilly and Company",sector:"Healthcare",marketCap:820,earningsDate:"2026-04-24",timing:"bmo" },
+  { ticker:"TSM",name:"Taiwan Semiconductor",sector:"Technology",marketCap:810,earningsDate:"2026-04-17",timing:"bmo" },
+  { ticker:"AVGO",name:"Broadcom Inc.",sector:"Technology",marketCap:790,earningsDate:"2026-03-06",timing:"amc" },
+  { ticker:"JPM",name:"JPMorgan Chase & Co.",sector:"Financial",marketCap:740,earningsDate:"2026-04-11",timing:"bmo" },
+  { ticker:"V",name:"Visa Inc.",sector:"Financial",marketCap:630,earningsDate:"2026-04-22",timing:"amc" },
+  { ticker:"WMT",name:"Walmart Inc.",sector:"Consumer Defensive",marketCap:610,earningsDate:"2026-02-20",timing:"bmo" },
+  { ticker:"UNH",name:"UnitedHealth Group Inc.",sector:"Healthcare",marketCap:590,earningsDate:"2026-04-15",timing:"bmo" },
+  { ticker:"XOM",name:"Exxon Mobil Corporation",sector:"Energy",marketCap:560,earningsDate:"2026-04-25",timing:"bmo" },
+  { ticker:"MA",name:"Mastercard Incorporated",sector:"Financial",marketCap:480,earningsDate:"2026-04-29",timing:"bmo" },
+  { ticker:"ORCL",name:"Oracle Corporation",sector:"Technology",marketCap:470,earningsDate:"2026-03-10",timing:"amc" },
+  { ticker:"PG",name:"Procter & Gamble Co.",sector:"Consumer Defensive",marketCap:460,earningsDate:"2026-04-17",timing:"bmo" },
+  { ticker:"COST",name:"Costco Wholesale Corp.",sector:"Consumer Defensive",marketCap:440,earningsDate:"2026-03-06",timing:"amc" },
+  { ticker:"JNJ",name:"Johnson & Johnson",sector:"Healthcare",marketCap:430,earningsDate:"2026-04-15",timing:"bmo" },
+  { ticker:"HD",name:"The Home Depot Inc.",sector:"Consumer Cyclical",marketCap:420,earningsDate:"2026-02-25",timing:"bmo" },
+  { ticker:"NFLX",name:"Netflix Inc.",sector:"Technology",marketCap:410,earningsDate:"2026-04-17",timing:"amc" },
+  { ticker:"ABBV",name:"AbbVie Inc.",sector:"Healthcare",marketCap:390,earningsDate:"2026-04-25",timing:"bmo" },
+  { ticker:"BAC",name:"Bank of America Corp.",sector:"Financial",marketCap:370,earningsDate:"2026-04-15",timing:"bmo" },
+  { ticker:"CRM",name:"Salesforce Inc.",sector:"Technology",marketCap:360,earningsDate:"2026-02-26",timing:"amc" },
+  { ticker:"CVX",name:"Chevron Corporation",sector:"Energy",marketCap:340,earningsDate:"2026-04-25",timing:"bmo" },
+  { ticker:"KO",name:"The Coca-Cola Company",sector:"Consumer Defensive",marketCap:320,earningsDate:"2026-04-21",timing:"bmo" },
+  { ticker:"MRK",name:"Merck & Co. Inc.",sector:"Healthcare",marketCap:310,earningsDate:"2026-04-24",timing:"bmo" },
+  { ticker:"AMD",name:"Advanced Micro Devices",sector:"Technology",marketCap:300,earningsDate:"2026-04-29",timing:"amc" },
+  { ticker:"PEP",name:"PepsiCo Inc.",sector:"Consumer Defensive",marketCap:280,earningsDate:"2026-04-22",timing:"bmo" },
+  { ticker:"TMO",name:"Thermo Fisher Scientific",sector:"Healthcare",marketCap:270,earningsDate:"2026-04-23",timing:"bmo" },
+  { ticker:"ADBE",name:"Adobe Inc.",sector:"Technology",marketCap:265,earningsDate:"2026-03-12",timing:"amc" },
+  { ticker:"LIN",name:"Linde plc",sector:"Materials",marketCap:260,earningsDate:"2026-04-28",timing:"bmo" },
+  { ticker:"ACN",name:"Accenture plc",sector:"Technology",marketCap:255,earningsDate:"2026-03-20",timing:"bmo" },
+  { ticker:"WFC",name:"Wells Fargo & Company",sector:"Financial",marketCap:250,earningsDate:"2026-04-11",timing:"bmo" },
+  { ticker:"MCD",name:"McDonald's Corporation",sector:"Consumer Cyclical",marketCap:245,earningsDate:"2026-04-28",timing:"bmo" },
+  { ticker:"CSCO",name:"Cisco Systems Inc.",sector:"Technology",marketCap:240,earningsDate:"2026-02-19",timing:"amc" },
+  { ticker:"ABT",name:"Abbott Laboratories",sector:"Healthcare",marketCap:235,earningsDate:"2026-04-16",timing:"bmo" },
+  { ticker:"DHR",name:"Danaher Corporation",sector:"Healthcare",marketCap:230,earningsDate:"2026-04-22",timing:"bmo" }
 ];
 
 // ============================================================
-// Utility functions
+// State
 // ============================================================
-
-function formatMarketCap(capInBillions) {
-  if (capInBillions >= 1000) return `$${(capInBillions / 1000).toFixed(2)}T`;
-  return `$${capInBillions}B`;
-}
-
-function formatDate(dateStr) {
-  const date = new Date(dateStr + "T00:00:00");
-  return date.toLocaleDateString("it-IT", { day: "numeric", month: "short", year: "numeric" });
-}
-
-function formatDateShort(dateStr) {
-  const date = new Date(dateStr + "T00:00:00");
-  return date.toLocaleDateString("it-IT", { day: "numeric", month: "short" });
-}
-
-function getDaysUntil(dateStr) {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const target = new Date(dateStr + "T00:00:00");
-  return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
-}
-
-function getCountdownText(days) {
-  if (days < 0) return "Passato";
-  if (days === 0) return "Oggi!";
-  if (days === 1) return "Domani";
-  if (days <= 7) return `${days} giorni`;
-  if (days <= 30) { const w = Math.floor(days / 7); return `${w} sett.${days % 7 > 0 ? ` ${days % 7}g` : ""}`; }
-  return `${days} giorni`;
-}
-
-function getCountdownClass(days) {
-  if (days < 0) return "countdown-passed";
-  if (days <= 3) return "countdown-soon";
-  if (days <= 14) return "countdown-near";
-  return "countdown-far";
-}
-
-function getUrgencyClass(days) {
-  if (days <= 3) return "urgency-soon";
-  if (days <= 14) return "urgency-near";
-  return "urgency-far";
-}
-
-function getTimingLabel(t) { return t === "bmo" ? "Pre-Market" : t === "amc" ? "After-Market" : "TBD"; }
-function getTimingClass(t) { return t === "bmo" ? "timing-bmo" : t === "amc" ? "timing-amc" : "timing-unknown"; }
-
-function isThisWeek(dateStr) {
-  const today = new Date(), dow = today.getDay();
-  const start = new Date(today); start.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1)); start.setHours(0,0,0,0);
-  const end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23,59,59,999);
-  const t = new Date(dateStr + "T12:00:00");
-  return t >= start && t <= end;
-}
-
-function isNextWeek(dateStr) {
-  const today = new Date(), dow = today.getDay();
-  const start = new Date(today); start.setDate(today.getDate() + (7 - (dow === 0 ? 6 : dow - 1))); start.setHours(0,0,0,0);
-  const end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23,59,59,999);
-  const t = new Date(dateStr + "T12:00:00");
-  return t >= start && t <= end;
-}
-
-function isThisMonth(dateStr) {
-  const today = new Date(), t = new Date(dateStr + "T12:00:00");
-  return t.getMonth() === today.getMonth() && t.getFullYear() === today.getFullYear();
-}
+let stocks = [];
+let currentView = "grid";
+let currentFilter = "all";
+let currentSort = "date-asc";
+let searchQuery = "";
+let dataSourceLabel = "Cache locale";
 
 // ============================================================
-// App state
+// Utilities
 // ============================================================
-let currentView = "grid", currentFilter = "all", currentSort = "date-asc", searchQuery = "", stocks = [];
-
-function initData() {
-  stocks = TOP_40_STOCKS.map((s, i) => ({ ...s, rank: i + 1, daysUntil: getDaysUntil(s.earningsDate) }));
+function formatCap(b) {
+    if (b >= 1000) return `$${(b/1000).toFixed(2)}T`;
+    return `$${b}B`;
 }
 
-function getFilteredStocks() {
-  let f = [...stocks];
-  if (searchQuery) {
-    const q = searchQuery.toLowerCase();
-    f = f.filter(s => s.ticker.toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || s.sector.toLowerCase().includes(q));
-  }
-  switch (currentFilter) {
-    case "thisWeek": f = f.filter(s => isThisWeek(s.earningsDate)); break;
-    case "nextWeek": f = f.filter(s => isNextWeek(s.earningsDate)); break;
-    case "thisMonth": f = f.filter(s => isThisMonth(s.earningsDate)); break;
-    case "bmo": f = f.filter(s => s.timing === "bmo"); break;
-    case "amc": f = f.filter(s => s.timing === "amc"); break;
-  }
-  switch (currentSort) {
-    case "date-asc": f.sort((a, b) => a.daysUntil - b.daysUntil); break;
-    case "date-desc": f.sort((a, b) => b.daysUntil - a.daysUntil); break;
-    case "cap-desc": f.sort((a, b) => b.marketCap - a.marketCap); break;
-    case "cap-asc": f.sort((a, b) => a.marketCap - b.marketCap); break;
-    case "name-asc": f.sort((a, b) => a.name.localeCompare(b.name)); break;
-  }
-  return f;
+function formatDate(d) {
+    return new Date(d+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"long",year:"numeric"});
+}
+
+function formatDateShort(d) {
+    return new Date(d+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"});
+}
+
+function formatDateCompact(d) {
+    return new Date(d+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit"});
+}
+
+function daysUntil(d) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    return Math.ceil((new Date(d+"T00:00:00") - today) / 86400000);
+}
+
+function countdownText(n) {
+    if (n < 0) return "Passato";
+    if (n === 0) return "OGGI";
+    if (n === 1) return "Domani";
+    if (n <= 7) return `${n} giorni`;
+    const w = Math.floor(n/7), r = n%7;
+    if (n <= 30) return `${w}w ${r > 0 ? r+"d" : ""}`.trim();
+    return `${n}d`;
+}
+
+function countdownClass(n) {
+    if (n < 0) return "c-passed";
+    if (n <= 3) return "c-soon";
+    if (n <= 14) return "c-near";
+    return "c-far";
+}
+
+function urgencyClass(n) {
+    if (n <= 3) return "urgency-soon";
+    if (n <= 14) return "urgency-near";
+    return "urgency-far";
+}
+
+function sectorClass(s) {
+    return "sector-" + s.replace(/\s+/g, "-");
+}
+
+function timingLabel(t) { return t === "bmo" ? "Pre-Market" : t === "amc" ? "After-Market" : "TBD"; }
+function timingClass(t) { return t === "bmo" ? "timing-bmo" : t === "amc" ? "timing-amc" : "timing-unknown"; }
+
+function isThisWeek(d) {
+    const today = new Date(), dow = today.getDay();
+    const mon = new Date(today); mon.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1)); mon.setHours(0,0,0,0);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
+    const t = new Date(d+"T12:00:00");
+    return t >= mon && t <= sun;
+}
+
+function isNextWeek(d) {
+    const today = new Date(), dow = today.getDay();
+    const mon = new Date(today); mon.setDate(today.getDate() + (7 - (dow === 0 ? 6 : dow - 1))); mon.setHours(0,0,0,0);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
+    const t = new Date(d+"T12:00:00");
+    return t >= mon && t <= sun;
+}
+
+function isThisMonth(d) {
+    const today = new Date(), t = new Date(d+"T12:00:00");
+    return t.getMonth() === today.getMonth() && t.getFullYear() === today.getFullYear();
 }
 
 // ============================================================
-// Rendering
+// Data Loading (with dynamic fetch attempt)
 // ============================================================
+async function fetchDynamicData() {
+    // Attempt to enrich data with Yahoo Finance quotes for live market cap
+    const tickers = BASE_STOCKS.map(s => s.ticker).join(",");
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const resp = await fetch(
+            `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(tickers)}&fields=marketCap,shortName`,
+            { signal: controller.signal, headers: { 'Accept': 'application/json' } }
+        );
+        clearTimeout(timeout);
+        if (!resp.ok) throw new Error("API error");
+        const data = await resp.json();
+        const quotes = data?.quoteResponse?.result || [];
+        if (quotes.length > 0) {
+            const quoteMap = {};
+            quotes.forEach(q => { quoteMap[q.symbol] = q; });
+            return BASE_STOCKS.map(s => {
+                const q = quoteMap[s.ticker] || quoteMap[s.ticker.replace(".", "-")];
+                if (q && q.marketCap) {
+                    return { ...s, marketCap: Math.round(q.marketCap / 1e9) };
+                }
+                return { ...s };
+            });
+        }
+    } catch (e) {
+        // Silently fall back to base data
+    }
+    return null;
+}
 
+async function loadData() {
+    const loading = document.getElementById("loadingScreen");
+    const errorEl = document.getElementById("errorScreen");
+    loading.style.display = "flex";
+    errorEl.style.display = "none";
+    document.getElementById("gridView").style.display = "none";
+    document.getElementById("listView").style.display = "none";
+
+    try {
+        // Try dynamic fetch first
+        const dynamicData = await fetchDynamicData();
+        if (dynamicData) {
+            stocks = dynamicData.map((s, i) => ({ ...s, rank: i + 1, days: daysUntil(s.earningsDate) }));
+            dataSourceLabel = "Dati live";
+        } else {
+            stocks = BASE_STOCKS.map((s, i) => ({ ...s, rank: i + 1, days: daysUntil(s.earningsDate) }));
+            dataSourceLabel = "Cache locale";
+        }
+        document.getElementById("dataSource").textContent = dataSourceLabel;
+
+        // Simulate brief loading for UX
+        await new Promise(r => setTimeout(r, 500));
+        loading.style.display = "none";
+        render();
+    } catch (err) {
+        loading.style.display = "none";
+        errorEl.style.display = "flex";
+        document.getElementById("errorMsg").textContent = err.message;
+    }
+}
+
+// ============================================================
+// Filtering & Sorting
+// ============================================================
+function getFiltered() {
+    let f = [...stocks];
+    if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        f = f.filter(s => s.ticker.toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || s.sector.toLowerCase().includes(q));
+    }
+    switch (currentFilter) {
+        case "thisWeek": f = f.filter(s => isThisWeek(s.earningsDate)); break;
+        case "nextWeek": f = f.filter(s => isNextWeek(s.earningsDate)); break;
+        case "thisMonth": f = f.filter(s => isThisMonth(s.earningsDate)); break;
+        case "bmo": f = f.filter(s => s.timing === "bmo"); break;
+        case "amc": f = f.filter(s => s.timing === "amc"); break;
+    }
+    switch (currentSort) {
+        case "date-asc": f.sort((a,b) => a.days - b.days); break;
+        case "date-desc": f.sort((a,b) => b.days - a.days); break;
+        case "cap-desc": f.sort((a,b) => b.marketCap - a.marketCap); break;
+        case "cap-asc": f.sort((a,b) => a.marketCap - b.marketCap); break;
+        case "name-asc": f.sort((a,b) => a.name.localeCompare(b.name)); break;
+    }
+    return f;
+}
+
+// ============================================================
+// Timeline
+// ============================================================
+function renderTimeline() {
+    const track = document.getElementById("timelineTrack");
+    const labels = document.getElementById("timelineLabels");
+    // Group by week for 12 weeks
+    const weeks = [];
+    const today = new Date(); today.setHours(0,0,0,0);
+    for (let w = 0; w < 12; w++) {
+        const start = new Date(today); start.setDate(today.getDate() + w * 7);
+        const end = new Date(start); end.setDate(start.getDate() + 6);
+        const count = stocks.filter(s => {
+            const d = new Date(s.earningsDate + "T12:00:00");
+            return d >= start && d <= end;
+        }).length;
+        weeks.push({ start, end, count });
+    }
+    const maxCount = Math.max(...weeks.map(w => w.count), 1);
+
+    track.innerHTML = weeks.map((w, i) => {
+        const h = Math.max(20, (w.count / maxCount) * 100);
+        let color = "var(--accent)";
+        if (i === 0) color = "var(--orange)";
+        if (i === 1) color = "var(--accent-light)";
+        if (w.count === 0) color = "var(--border)";
+        return `<div class="timeline-bar" style="background:${color};opacity:${w.count > 0 ? 0.3 + (w.count/maxCount)*0.7 : 0.15}" title="${w.count} earnings nella settimana del ${formatDateCompact(w.start.toISOString().split('T')[0])}">
+            <span class="timeline-bar-count">${w.count}</span>
+        </div>`;
+    }).join("");
+
+    labels.innerHTML = `
+        <span class="timeline-label">Questa sett.</span>
+        <span class="timeline-label">+4 sett.</span>
+        <span class="timeline-label">+8 sett.</span>
+        <span class="timeline-label">+12 sett.</span>
+    `;
+}
+
+// ============================================================
+// Stats
+// ============================================================
+function renderStats() {
+    const in7 = stocks.filter(s => s.days >= 0 && s.days <= 7).length;
+    const in30 = stocks.filter(s => s.days >= 0 && s.days <= 30).length;
+    const upcoming = stocks.filter(s => s.days >= 0).sort((a,b) => a.days - b.days);
+    const sectors = new Set(stocks.map(s => s.sector));
+    const totalCap = stocks.reduce((sum, s) => sum + s.marketCap, 0);
+
+    document.getElementById("stat7d").textContent = in7;
+    document.getElementById("stat7dSub").textContent = in7 === 1 ? "earnings" : "earnings";
+    document.getElementById("stat30d").textContent = in30;
+    document.getElementById("stat30dSub").textContent = "earnings";
+
+    if (upcoming.length > 0) {
+        const next = upcoming[0];
+        document.getElementById("statNext").textContent = next.ticker;
+        document.getElementById("statNextSub").textContent = next.days === 0 ? "Oggi!" : next.days === 1 ? "Domani" : `tra ${next.days} giorni`;
+    }
+
+    document.getElementById("statSectors").textContent = sectors.size;
+    document.getElementById("statTotalCap").textContent = formatCap(totalCap);
+    document.getElementById("countAll").textContent = stocks.length;
+    document.getElementById("footerUpdate").textContent = new Date().toLocaleString("it-IT", { day:"numeric", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" });
+}
+
+// ============================================================
+// Grid Rendering
+// ============================================================
 function renderGrid(data) {
-  const c = document.getElementById("gridView");
-  if (!data.length) { c.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)">Nessun risultato trovato</div>'; return; }
-  c.innerHTML = data.map((s, i) => `
-    <div class="card ${getUrgencyClass(s.daysUntil)}" style="--i:${i}">
-      <div class="card-header"><span class="card-ticker">${s.ticker}</span><span class="card-rank">#${s.rank}</span></div>
-      <div class="card-name">${s.name}</div>
-      <span class="card-sector">${s.sector}</span>
-      <div class="card-divider"></div>
-      <div class="card-earnings"><span class="earnings-date">${formatDate(s.earningsDate)}</span><span class="earnings-timing ${getTimingClass(s.timing)}">${getTimingLabel(s.timing)}</span></div>
-      <div class="card-meta"><span class="market-cap">${formatMarketCap(s.marketCap)}</span><span class="countdown ${getCountdownClass(s.daysUntil)}">${getCountdownText(s.daysUntil)}</span></div>
-    </div>`).join("");
+    const el = document.getElementById("gridView");
+    if (!data.length) {
+        el.innerHTML = `<div class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <p>Nessun risultato per i filtri selezionati</p>
+        </div>`;
+        return;
+    }
+
+    el.innerHTML = data.map(s => {
+        const progressMax = 90;
+        const progressVal = Math.max(0, Math.min(100, ((progressMax - Math.max(0, s.days)) / progressMax) * 100));
+        const progressColor = s.days <= 3 ? "var(--red)" : s.days <= 14 ? "var(--orange)" : "var(--accent)";
+
+        return `<div class="card ${urgencyClass(s.days)}">
+            <div class="card-accent"></div>
+            <div class="card-body">
+                <div class="card-top">
+                    <div class="card-ticker-wrap">
+                        <span class="card-ticker">${s.ticker}</span>
+                        <span class="card-rank">#${s.rank}</span>
+                    </div>
+                    <div class="card-countdown-box">
+                        <div class="card-countdown-num ${countdownClass(s.days)}">${s.days >= 0 ? s.days : '—'}</div>
+                        <div class="card-countdown-label">${s.days >= 0 ? (s.days === 1 ? 'giorno' : 'giorni') : 'passato'}</div>
+                    </div>
+                </div>
+                <div class="card-name">${s.name}</div>
+                <span class="card-sector ${sectorClass(s.sector)}">${s.sector}</span>
+                <div class="card-divider"></div>
+                <div class="card-earnings-row">
+                    <div class="card-date">
+                        <div class="card-date-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        </div>
+                        <span class="card-date-text">${formatDate(s.earningsDate)}</span>
+                    </div>
+                    <span class="card-timing ${timingClass(s.timing)}">${timingLabel(s.timing)}</span>
+                </div>
+            </div>
+            <div class="card-footer">
+                <span class="card-mcap">Cap: <strong>${formatCap(s.marketCap)}</strong></span>
+                <div class="card-progress">
+                    <div class="card-progress-bar" style="width:${progressVal}%;background:${progressColor}"></div>
+                </div>
+            </div>
+        </div>`;
+    }).join("");
 }
 
+// ============================================================
+// List Rendering
+// ============================================================
 function renderList(data) {
-  const tb = document.getElementById("listBody");
-  if (!data.length) { tb.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">Nessun risultato trovato</td></tr>'; return; }
-  tb.innerHTML = data.map(s => `
-    <tr>
-      <td>${s.rank}</td><td class="ticker-cell">${s.ticker}</td><td>${s.name}</td>
-      <td class="sector-cell">${s.sector}</td><td class="cap-cell">${formatMarketCap(s.marketCap)}</td>
-      <td class="date-cell">${formatDate(s.earningsDate)}</td>
-      <td><span class="earnings-timing ${getTimingClass(s.timing)}">${getTimingLabel(s.timing)}</span></td>
-      <td><span class="countdown ${getCountdownClass(s.daysUntil)}">${getCountdownText(s.daysUntil)}</span></td>
+    const tb = document.getElementById("listBody");
+    if (!data.length) {
+        tb.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:48px;color:var(--text-muted)">Nessun risultato</td></tr>`;
+        return;
+    }
+    tb.innerHTML = data.map(s => `<tr>
+        <td style="color:var(--text-muted);font-weight:600">${s.rank}</td>
+        <td class="td-ticker">${s.ticker}</td>
+        <td class="td-name">${s.name}</td>
+        <td class="td-sector"><span class="${sectorClass(s.sector)}" style="padding:3px 10px;border-radius:12px">${s.sector}</span></td>
+        <td class="td-mcap">${formatCap(s.marketCap)}</td>
+        <td class="td-date">${formatDate(s.earningsDate)}</td>
+        <td><span class="td-timing ${timingClass(s.timing)}" style="padding:4px 10px;border-radius:12px;font-size:0.6875rem;font-weight:700;text-transform:uppercase">${timingLabel(s.timing)}</span></td>
+        <td class="td-countdown"><span class="${countdownClass(s.days)}">${countdownText(s.days)}</span></td>
     </tr>`).join("");
 }
 
-function renderStats() {
-  const in7 = stocks.filter(s => s.daysUntil >= 0 && s.daysUntil <= 7).length;
-  const in30 = stocks.filter(s => s.daysUntil >= 0 && s.daysUntil <= 30).length;
-  const thisW = stocks.filter(s => isThisWeek(s.earningsDate)).length;
-  document.getElementById("next7days").textContent = in7;
-  document.getElementById("next30days").textContent = in30;
-  document.getElementById("thisWeek").textContent = thisW;
-  document.getElementById("lastUpdate").textContent = formatDateShort(new Date().toISOString().split("T")[0]);
-}
-
+// ============================================================
+// Main Render
+// ============================================================
 function render() {
-  const data = getFilteredStocks();
-  const gv = document.getElementById("gridView"), lv = document.getElementById("listView");
-  if (currentView === "grid") { gv.style.display = "grid"; lv.style.display = "none"; renderGrid(data); }
-  else { gv.style.display = "none"; lv.style.display = "block"; renderList(data); }
-  renderStats();
+    const data = getFiltered();
+    const gv = document.getElementById("gridView");
+    const lv = document.getElementById("listView");
+
+    document.getElementById("resultsCount").textContent = data.length;
+
+    if (currentView === "grid") {
+        gv.style.display = "grid"; lv.style.display = "none";
+        renderGrid(data);
+    } else {
+        gv.style.display = "none"; lv.style.display = "block";
+        renderList(data);
+    }
+    renderStats();
+    renderTimeline();
 }
 
 // ============================================================
-// Event listeners
+// Clock
 // ============================================================
+function updateClock() {
+    document.getElementById("navTime").textContent = new Date().toLocaleTimeString("it-IT", { hour:"2-digit", minute:"2-digit", second:"2-digit" });
+}
 
-function setupEventListeners() {
-  document.getElementById("btnGrid").addEventListener("click", () => { currentView = "grid"; document.getElementById("btnGrid").classList.add("active"); document.getElementById("btnList").classList.remove("active"); render(); });
-  document.getElementById("btnList").addEventListener("click", () => { currentView = "list"; document.getElementById("btnList").classList.add("active"); document.getElementById("btnGrid").classList.remove("active"); render(); });
-  document.getElementById("searchInput").addEventListener("input", e => { searchQuery = e.target.value; render(); });
-  document.querySelectorAll(".filter-btn").forEach(btn => {
-    btn.addEventListener("click", () => { document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active")); btn.classList.add("active"); currentFilter = btn.dataset.filter; render(); });
-  });
-  document.getElementById("sortSelect").addEventListener("change", e => { currentSort = e.target.value; render(); });
+// ============================================================
+// Events
+// ============================================================
+function setupEvents() {
+    // View toggle
+    document.getElementById("btnGrid").addEventListener("click", () => {
+        currentView = "grid";
+        document.getElementById("btnGrid").classList.add("active");
+        document.getElementById("btnList").classList.remove("active");
+        render();
+    });
+    document.getElementById("btnList").addEventListener("click", () => {
+        currentView = "list";
+        document.getElementById("btnList").classList.add("active");
+        document.getElementById("btnGrid").classList.remove("active");
+        render();
+    });
+
+    // Search
+    document.getElementById("searchInput").addEventListener("input", e => {
+        searchQuery = e.target.value;
+        render();
+    });
+
+    // Filters
+    document.querySelectorAll(".chip[data-filter]").forEach(chip => {
+        chip.addEventListener("click", () => {
+            document.querySelectorAll(".chip[data-filter]").forEach(c => c.classList.remove("active"));
+            chip.classList.add("active");
+            currentFilter = chip.dataset.filter;
+            render();
+        });
+    });
+
+    // Sort
+    document.getElementById("sortSelect").addEventListener("change", e => {
+        currentSort = e.target.value;
+        render();
+    });
+
+    // Refresh
+    document.getElementById("btnRefresh").addEventListener("click", async () => {
+        const btn = document.getElementById("btnRefresh");
+        btn.classList.add("spinning");
+        await loadData();
+        setTimeout(() => btn.classList.remove("spinning"), 600);
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener("keydown", e => {
+        if (e.key === "/" && document.activeElement.tagName !== "INPUT") {
+            e.preventDefault();
+            document.getElementById("searchInput").focus();
+        }
+        if (e.key === "Escape") {
+            document.getElementById("searchInput").blur();
+            searchQuery = "";
+            document.getElementById("searchInput").value = "";
+            render();
+        }
+    });
 }
 
 // ============================================================
 // Boot
 // ============================================================
+document.addEventListener("DOMContentLoaded", () => {
+    setupEvents();
+    updateClock();
+    setInterval(updateClock, 1000);
 
-document.addEventListener("DOMContentLoaded", function() {
-  const loading = document.getElementById("loading"), errorEl = document.getElementById("error");
-  try {
-    initData();
-    setupEventListeners();
-    setTimeout(() => { loading.style.display = "none"; render(); }, 600);
-  } catch (err) {
-    loading.style.display = "none";
-    errorEl.style.display = "flex";
-    document.getElementById("errorMsg").textContent = err.message;
-  }
+    // Auto-refresh countdown every 60 seconds
+    setInterval(() => {
+        stocks.forEach(s => { s.days = daysUntil(s.earningsDate); });
+        render();
+    }, 60000);
+
+    loadData();
 });
-    </script>
+</script>
 </body>
 </html>
